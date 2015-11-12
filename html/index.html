@@ -7,7 +7,7 @@
         <link href="http://blog.jinxing.me/html/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="JinXing's Blog Atom Feed" />
 
         <!--[if IE]>
-            <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
         <![endif]-->
 </head>
 
@@ -21,23 +21,150 @@
 
             <aside id="featured" class="body">
                 <article>
-                    <h1 class="entry-title"><a href="http://blog.jinxing.me/html/my-super-post.html">My super title</a></h1>
+                    <h1 class="entry-title"><a href="http://blog.jinxing.me/html/django-debug-mo-shi-xia-da-liang-cha-xun-shi-de-nei-cun-zhan-yong-wen-ti-pai-cha.html">Django Debug 模式下大量查询时的内存占用问题排查</a></h1>
 <footer class="post-info">
-        <abbr class="published" title="2010-12-03T10:20:00">
-                Published: Fri 03 December 2010
+        <abbr class="published" title="2015-11-12T00:00:00+01:00">
+                Published: 四 12 十一月 2015
         </abbr>
 		<br />
-        <abbr class="modified" title="2010-12-05T19:30:00">
-                Updated: Sun 05 December 2010
+        <abbr class="modified" title="2015-11-12T00:00:00+01:00">
+                Updated: 四 12 十一月 2015
         </abbr>
 
         <address class="vcard author">
-                By                         <a class="url fn" href="http://blog.jinxing.me/html/author/alexis-metaireau.html">Alexis Metaireau</a>
-                        <a class="url fn" href="http://blog.jinxing.me/html/author/conan-doyle.html">Conan Doyle</a>
+                By                         <a class="url fn" href="http://blog.jinxing.me/html/author/jinxing.html">jinxing</a>
         </address>
-<p>In <a href="http://blog.jinxing.me/html/category/python.html">Python</a>. </p>
-<p>tags: <a href="http://blog.jinxing.me/html/tag/pelican.html">pelican</a> <a href="http://blog.jinxing.me/html/tag/publishing.html">publishing</a> </p>
-</footer><!-- /.post-info --><p>This is the content of my super blog post.</p><p>There are <a href="http://blog.jinxing.me/html/my-super-post.html#disqus_thread">comments</a>.</p>                </article>
+<p>In <a href="http://blog.jinxing.me/html/category/python.html">Python</a>.</p>
+<p>tags: <a href="http://blog.jinxing.me/html/tag/python.html">Python</a> <a href="http://blog.jinxing.me/html/tag/django.html">Django</a> <a href="http://blog.jinxing.me/html/tag/debug.html">Debug</a> <a href="http://blog.jinxing.me/html/tag/sql.html">SQL</a> <a href="http://blog.jinxing.me/html/tag/orm.html">ORM</a> <a href="http://blog.jinxing.me/html/tag/models.html">Models</a> <a href="http://blog.jinxing.me/html/tag/query.html">Query</a> <a href="http://blog.jinxing.me/html/tag/cha-xun.html">查询</a> <a href="http://blog.jinxing.me/html/tag/memory.html">Memory</a> <a href="http://blog.jinxing.me/html/tag/leak.html">leak</a> <a href="http://blog.jinxing.me/html/tag/nei-cun-xie-lou.html">内存，泄漏</a> </p>
+</footer><!-- /.post-info --><h1>Django Debug 模式下大量查询时的内存占用问题排查</h1>
+<h3>现象</h3>
+<ol>
+<li>在本地做测试，启动 100个 agent，执行 uptime 10次，每次执行输出都立即返回输出给 server</li>
+<li>top 查看，发现 <code>task_queue.py</code> 进程占用内存达到 1G+</li>
+</ol>
+<h3>排查</h3>
+<ol>
+<li>使用 <code>meliae</code> 库 dump 出对象的引用关系数据， 然后加载 dump 出的关系数据，查看统计信息，启动 embed IPython  进行手动分析  </li>
+</ol>
+<div class="highlight"><pre><span class="n">from</span> <span class="n">meliae</span> <span class="n">import</span> <span class="n">loader</span><span class="p">,</span> <span class="n">scanner</span>
+<span class="n">scanner</span><span class="p">.</span><span class="n">dump_all_objects</span><span class="p">(</span><span class="err">&#39;</span><span class="p">.</span><span class="o">/</span><span class="n">objects_dump</span><span class="p">.</span><span class="n">txt</span><span class="err">&#39;</span><span class="p">)</span>
+<span class="n">om</span> <span class="o">=</span> <span class="n">loader</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="err">&#39;</span><span class="p">.</span><span class="o">/</span><span class="n">objects_dump</span><span class="p">.</span><span class="n">txt</span><span class="err">&#39;</span><span class="p">)</span>
+<span class="n">print</span> <span class="n">om</span><span class="p">.</span><span class="n">summarize</span><span class="p">()</span>
+<span class="n">from</span> <span class="n">IPython</span> <span class="n">import</span> <span class="n">embed</span>
+<span class="n">embed</span><span class="p">()</span>
+</pre></div>
+
+
+<ol>
+<li>发现 unicode 对象占用90%以上的内存</li>
+</ol>
+<div class="highlight"><pre><span class="n">Total</span> <span class="mi">154829</span> <span class="n">objects</span><span class="p">,</span> <span class="mi">392</span> <span class="n">types</span><span class="p">,</span> <span class="n">Total</span> <span class="n">size</span> <span class="o">=</span> <span class="mf">1157.5</span><span class="n">MiB</span> <span class="p">(</span><span class="mi">1213776200</span> <span class="n">bytes</span><span class="p">)</span>
+ <span class="n">Index</span>   <span class="n">Count</span>   <span class="o">%</span>      <span class="n">Size</span>   <span class="o">%</span> <span class="n">Cum</span>     <span class="n">Max</span> <span class="n">Kind</span>
+     <span class="mi">0</span>   <span class="mi">45339</span>  <span class="mi">291193593360</span>  <span class="mi">98</span>  <span class="mi">98</span> <span class="mi">1611120</span> <span class="n">unicode</span>
+     <span class="mi">1</span>   <span class="mi">16725</span>  <span class="mi">10</span>   <span class="mi">7236600</span>   <span class="mi">0</span>  <span class="mi">98</span>  <span class="mi">196888</span> <span class="n">dict</span>
+     <span class="mi">2</span>   <span class="mi">28517</span>  <span class="mi">18</span>   <span class="mi">2633114</span>   <span class="mi">0</span>  <span class="mi">99</span>   <span class="mi">89468</span> <span class="n">str</span>
+     <span class="mi">3</span>    <span class="mi">1599</span>   <span class="mi">1</span>   <span class="mi">1445496</span>   <span class="mi">0</span>  <span class="mi">99</span>     <span class="mi">904</span> <span class="n">type</span>
+     <span class="mi">4</span>     <span class="mi">558</span>   <span class="mi">0</span>   <span class="mi">1442400</span>   <span class="mi">0</span>  <span class="mi">99</span>   <span class="mi">12624</span> <span class="n">module</span>
+</pre></div>
+
+
+<ol>
+<li>通过配合 IPython, ctypes 一步步查到引用 unicode 对象的元凶</li>
+</ol>
+<div class="highlight"><pre><span class="nt">In</span> <span class="cp">[</span><span class="mi">2</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span> <span class="o">=</span> <span class="nt">om</span><span class="nc">.get_all</span><span class="o">(</span><span class="s1">&#39;unicode&#39;</span><span class="o">)</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span>   <span class="err">#</span> <span class="err">获取所有</span> <span class="nt">unicode</span> <span class="err">对象，取第一个返回</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">3</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">3</span><span class="cp">]</span><span class="o">:</span> <span class="nt">unicode</span><span class="o">(</span><span class="nt">140189670108784</span> <span class="nt">1608304B</span> <span class="nt">1par</span> <span class="s1">&#39;INSERT INTO `echelon_changelogentry` (`content_type`, `object_id`, `object_str`, `action`, `timestam&quot;&#39;</span><span class="o">)</span>      <span class="err">#</span> <span class="err">发现是保存的数据库查询语句</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">4</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span><span class="nc">.p</span>    <span class="err">#</span> <span class="err">所有引用该</span> <span class="nt">unicode</span> <span class="err">对象的列表</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">4</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="nx">dict</span><span class="p">(</span><span class="mi">140189669965904</span> <span class="mi">280</span><span class="nx">B</span> <span class="mi">4</span><span class="nx">refs</span> <span class="mi">1</span><span class="nx">par</span><span class="p">)</span><span class="cp">]</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">5</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">5</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="nb">list</span><span class="p">(</span><span class="mi">140189709938200</span> <span class="mi">98632</span><span class="nx">B</span> <span class="mi">12116</span><span class="nx">refs</span> <span class="mi">1</span><span class="nx">par</span><span class="p">)</span><span class="cp">]</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">6</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">6</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="nx">DatabaseWrapper</span><span class="p">(</span><span class="mi">140189709836048</span> <span class="mi">3416</span><span class="nx">B</span> <span class="mi">51</span><span class="nx">refs</span> <span class="mi">2</span><span class="nx">par</span><span class="p">)</span><span class="cp">]</span>    <span class="err">#</span> <span class="err">通过一层层查看，这个变量比较可疑</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">7</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">7</span><span class="cp">]</span><span class="o">:</span> 
+<span class="cp">[</span><span class="nx">dict</span><span class="p">(</span><span class="mi">140189721487352</span> <span class="mi">280</span><span class="nx">B</span> <span class="mi">2</span><span class="nx">refs</span> <span class="mi">1</span><span class="nx">par</span><span class="p">),</span>
+ <span class="nx">DatabaseErrorWrapper</span><span class="p">(</span><span class="mi">140189676039824</span> <span class="mi">344</span><span class="nx">B</span> <span class="mi">3</span><span class="nx">refs</span> <span class="mi">1</span><span class="nx">par</span><span class="p">)</span><span class="cp">]</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">8</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">8</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="nx">dict</span><span class="p">(</span><span class="mi">140189721487072</span> <span class="mi">280</span><span class="nx">B</span> <span class="mi">2</span><span class="nx">refs</span> <span class="mi">1</span><span class="nx">par</span><span class="p">)</span><span class="cp">]</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">9</span><span class="cp">]</span><span class="o">:</span> <span class="nt">au</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span><span class="cp">[</span><span class="mi">0</span><span class="cp">]</span><span class="nc">.p</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">9</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="k">thread</span><span class="bp">.</span><span class="nx">_local</span><span class="p">(</span><span class="mi">140189724187920</span> <span class="mi">96</span><span class="nx">B</span> <span class="mi">2</span><span class="nx">refs</span> <span class="mi">1</span><span class="nx">par</span><span class="p">)</span><span class="cp">]</span>     <span class="err">#</span> <span class="err">已经到线程顶层</span>
+
+<span class="err">#</span> <span class="err">这里定义了一个通过</span> <span class="nt">id</span> <span class="err">查找到对象的函数</span>
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">10</span><span class="cp">]</span><span class="o">:</span> <span class="nt">def</span> <span class="nt">byid</span><span class="o">(</span><span class="nt">id_</span><span class="o">):</span> 
+   <span class="o">....:</span>     <span class="nt">import</span> <span class="nt">ctypes</span>
+   <span class="o">....:</span>     <span class="nt">return</span> <span class="nt">ctypes</span><span class="nc">.cast</span><span class="o">(</span><span class="nt">id_</span><span class="o">,</span> <span class="nt">ctypes</span><span class="nc">.py_object</span><span class="o">)</span><span class="nc">.value</span>
+   <span class="o">....:</span> 
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">13</span><span class="cp">]</span><span class="o">:</span> <span class="nt">dw</span> <span class="o">=</span> <span class="nt">byid</span><span class="o">(</span><span class="nt">140189709836048</span><span class="o">)</span>
+<span class="err">#</span> <span class="err">查找对象的属性，看是那一个变量指向了</span> <span class="nt">list</span><span class="o">(</span><span class="nt">140189709938200</span> <span class="nt">98632B</span> <span class="nt">12116refs</span> <span class="nt">1par</span><span class="o">)</span>
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">15</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="nx">attr</span> <span class="nb">for</span> <span class="n">attr</span> <span class="k">in</span> <span class="nb">dir</span><span class="p">(</span><span class="nx">dw</span><span class="p">)</span> <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="nx">dw</span><span class="p">,</span> <span class="nx">attr</span><span class="p">))</span> <span class="o">==</span> <span class="mi">140189709938200</span><span class="cp">]</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">15</span><span class="cp">]</span><span class="o">:</span> <span class="cp">[</span><span class="s1">&#39;queries&#39;</span><span class="cp">]</span>  <span class="err">#</span> <span class="err">就是这个</span> <span class="nt">queries</span>
+
+<span class="nt">In</span> <span class="cp">[</span><span class="mi">17</span><span class="cp">]</span><span class="o">:</span> <span class="nt">len</span><span class="o">(</span><span class="nt">dw</span><span class="nc">.queries</span><span class="o">)</span>
+<span class="nt">Out</span><span class="cp">[</span><span class="mi">17</span><span class="cp">]</span><span class="o">:</span> <span class="nt">12116</span>
+</pre></div>
+
+
+<ol>
+<li>查看源代码 <code>django/db/backends/__init__.py</code></li>
+</ol>
+<div class="highlight"><pre><span class="n">class</span> <span class="n">BaseDatabaseWrapper</span><span class="p">(</span><span class="n">object</span><span class="p">)</span><span class="o">:</span>
+    <span class="n">def</span> <span class="n">__init__</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">settings_dict</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="n">DEFAULT_DB_ALIAS</span><span class="p">,</span>
+                 <span class="n">allow_thread_sharing</span><span class="o">=</span><span class="n">False</span><span class="p">)</span><span class="o">:</span>
+        <span class="err">#</span> <span class="p">...</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">queries</span> <span class="o">=</span> <span class="p">[]</span>  <span class="err">#</span> <span class="err">正是因为这个</span> <span class="n">queries</span> <span class="err">保存了所有的查询语句导致内存不释放</span>
+        <span class="err">#</span> <span class="p">...</span>
+</pre></div>
+
+
+<ol>
+<li>搜索对 queries 的调用，发现并没有对该属性的操作，于是使用 property 拦劫对 queries 的访问</li>
+</ol>
+<div class="highlight"><pre><span class="cp"># 已将 self.queries 重命名为 self._queries</span>
+<span class="n">def</span> <span class="n">get_queries</span><span class="p">(</span><span class="n">self</span><span class="p">)</span><span class="o">:</span>
+    <span class="k">return</span> <span class="n">self</span><span class="p">.</span><span class="n">_queries</span>
+
+<span class="n">def</span> <span class="n">set_queries</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span><span class="o">:</span>
+    <span class="n">self</span><span class="p">.</span><span class="n">_queries</span> <span class="o">=</span> <span class="n">value</span>
+
+<span class="n">queries</span> <span class="o">=</span> <span class="n">property</span><span class="p">(</span><span class="n">get_queries</span><span class="p">,</span> <span class="n">set_queries</span><span class="p">)</span>
+</pre></div>
+
+
+<ol>
+<li>在 <code>get_queries()</code> 和 <code>set_queries()</code> 处下断点，然后通过查看调用栈发现因为开启了 Debug 所以  <code>BaseDatabaseWrapper.cursor()</code> 函数返回的 cursor 对象会将所有查询 append 到 queries 。。。</li>
+</ol>
+<div class="highlight"><pre><span class="n">class</span> <span class="n">CursorDebugWrapper</span><span class="p">(</span><span class="n">CursorWrapper</span><span class="p">)</span><span class="o">:</span>
+    <span class="n">def</span> <span class="n">execute</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">sql</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">None</span><span class="p">)</span><span class="o">:</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
+        <span class="nl">try:</span>
+            <span class="k">return</span> <span class="n">super</span><span class="p">(</span><span class="n">CursorDebugWrapper</span><span class="p">,</span> <span class="n">self</span><span class="p">).</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+        <span class="nl">finally:</span>
+            <span class="n">stop</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span>
+            <span class="n">duration</span> <span class="o">=</span> <span class="n">stop</span> <span class="o">-</span> <span class="n">start</span>
+            <span class="n">sql</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">db</span><span class="p">.</span><span class="n">ops</span><span class="p">.</span><span class="n">last_executed_query</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">cursor</span><span class="p">,</span> <span class="n">sql</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+            <span class="n">self</span><span class="p">.</span><span class="n">db</span><span class="p">.</span><span class="n">queries</span><span class="p">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="err">&#39;</span><span class="n">sql</span><span class="err">&#39;</span><span class="o">:</span> <span class="n">sql</span><span class="p">,</span>
+                <span class="err">&#39;</span><span class="n">time</span><span class="err">&#39;</span><span class="o">:</span> <span class="s">&quot;%.3f&quot;</span> <span class="o">%</span> <span class="n">duration</span><span class="p">,</span>
+            <span class="p">})</span>
+            <span class="n">logger</span><span class="p">.</span><span class="n">debug</span><span class="p">(</span><span class="err">&#39;</span><span class="p">(</span><span class="o">%</span><span class="mf">.3f</span><span class="p">)</span> <span class="o">%</span><span class="n">s</span><span class="p">;</span> <span class="n">args</span><span class="o">=%</span><span class="n">s</span><span class="err">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">duration</span><span class="p">,</span> <span class="n">sql</span><span class="p">,</span> <span class="n">params</span><span class="p">),</span>
+                <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="err">&#39;</span><span class="n">duration</span><span class="err">&#39;</span><span class="o">:</span> <span class="n">duration</span><span class="p">,</span> <span class="err">&#39;</span><span class="n">sql</span><span class="err">&#39;</span><span class="o">:</span> <span class="n">sql</span><span class="p">,</span> <span class="err">&#39;</span><span class="n">params</span><span class="err">&#39;</span><span class="o">:</span> <span class="n">params</span><span class="p">}</span>
+            <span class="p">)</span>
+</pre></div>
+
+
+<ol>
+<li>将 Debug 设为 False 后内存占用恢复正常</li>
+</ol>
+<h3>教训</h3>
+<p><strong>不要在 Debug 模式下进行性能测试！！！</strong> </p><p>There are <a href="http://blog.jinxing.me/html/django-debug-mo-shi-xia-da-liang-cha-xun-shi-de-nei-cun-zhan-yong-wen-ti-pai-cha.html#disqus_thread">comments</a>.</p>                </article>
             </aside><!-- /#featured -->
         <section id="extras" class="body">
                 <div class="social">
@@ -62,7 +189,7 @@
     (function () {
         var s = document.createElement('script'); s.async = true;
         s.type = 'text/javascript';
-        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        s.src = 'https://' + disqus_shortname + '.disqus.com/count.js';
         (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
     }());
 </script>
